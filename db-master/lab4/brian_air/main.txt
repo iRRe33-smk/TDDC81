@@ -1,0 +1,11 @@
+-- PASSWORD: Bd6bRoib
+
+source /home/arvkr827/BrianAir_Git/db/lab4/brian_air/classes.txt;
+source /home/arvkr827/BrianAir_Git/db/lab4/brian_air/procedures.txt;
+
+-- source /home/arvkr827/BrianAir_Git/db/lab4/brian_air/Question10FillWithFlights.sql;
+-- source /home/arvkr827/BrianAir_Git/db/lab4/brian_air/Question3.sql;
+source /home/arvkr827/BrianAir_Git/db/lab4/brian_air/Question6.sql;
+-- source /home/arvkr827/BrianAir_Git/db/lab4/brian_air/Question7.sql;
+
+-- source /home/arvkr827/BrianAir_Git/db/lab4/brian_air/fill_db.txt;

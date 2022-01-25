@@ -1,0 +1,127 @@
+SET FOREIGN_KEY_CHECKS=0;
+drop table if exists Booking, Holds, Payer, Reservation, Flight, Contact, Passenger, Weekly_Schedule, Route, Airport, Year;
+drop view if exists allFlights;
+
+create table Year (
+ID int,
+PF double,
+primary key (ID)
+);
+
+
+
+create table Airport (
+airport_code varchar(3),
+name varchar(30),
+country varchar(30),
+primary key (airport_code)
+);
+
+
+
+create table Route (
+ID int not null auto_increment,
+price double,
+departure varchar(3),
+arrival varchar(3),
+year int,
+primary key (ID),
+foreign key (arrival) references Airport(airport_code),
+foreign key (departure)  references Airport(airport_code),
+foreign key (year) references Year(ID)
+);
+
+create or replace table Weekday (
+day varchar(10),
+year int,
+weekdayfactor double,
+primary key (day, year),
+foreign key (year) references Year(ID)
+);
+
+
+
+create table Weekly_Schedule (
+ID int not null auto_increment,
+time_of_day time,
+weekday varchar(10),
+route int,
+primary key(ID),
+foreign key (weekday) references Weekday(day),
+foreign key (route) references Route(ID)
+);
+
+
+
+create table Flight (
+ID int not null auto_increment,
+week_number int,
+weekly_schedule int,
+primary key (ID),
+foreign key (weekly_schedule) references Weekly_Schedule(ID)
+);
+
+
+
+create table Passenger (
+passport_number int,
+full_name varchar(255),
+primary key (passport_number)
+);
+
+
+
+create table Payer (
+card_number bigint,
+card_holder varchar(255),
+primary key (card_number)
+);
+
+
+
+CREATE TABLE Contact (
+passenger_passport_number int,
+phone_number BIGINT,
+reservation_number INTEGER,
+email VARCHAR(50),
+foreign key(passenger_passport_number) REFERENCES Passenger(passport_number)
+);
+
+
+
+CREATE TABLE Reservation (
+number_of_passengers INTEGER,
+reservation_number INTEGER NOT NULL AUTO_INCREMENT,
+contact INTEGER,
+flight INTEGER,
+FOREIGN KEY (contact) REFERENCES Contact (passenger_passport_number),
+PRIMARY KEY (reservation_number)
+);
+
+CREATE TABLE Holds(
+passenger int not null,
+reservation_number int not null,
+ticket_number int UNIQUE,
+PRIMARY KEY (passenger, reservation_number),
+FOREIGN KEY (passenger) REFERENCES Passenger (passport_number),
+FOREIGN KEY (reservation_number) REFERENCES Reservation(reservation_number)
+);
+
+
+
+CREATE TABLE Booking(
+reservation_number INTEGER,
+payer BIGINT,
+price DOUBLE,
+FOREIGN KEY (payer) REFERENCES Payer (card_number),
+FOREIGN KEY (reservation_number) REFERENCES Reservation(reservation_number),
+PRIMARY KEY (reservation_number)
+);
+
+create view allFlights as (
+
+select airport_code_to_name(Route.departure) as departure_city_name, airport_code_to_name(Route.arrival) as destination_city_name, Weekly_Schedule.time_of_day as departure_time,  Weekly_Schedule.weekday as departure_day, Flight.week_number as departure_week, Route.year as departure_year, calculateFreeSeats(Flight.ID) as nr_of_free_seats, calculatePrice(Flight.ID) as current_price_per_seat
+from (Flight
+  inner join Weekly_Schedule on Flight.weekly_schedule=Weekly_Schedule.ID
+  inner join Route on Weekly_Schedule.route = Route.ID)
+GROUP BY departure_city_name, destination_city_name, departure_time, departure_day,departure_week, departure_year, nr_of_free_seats, current_price_per_seat);

@@ -1,0 +1,393 @@
+drop procedure if exists addYear;
+drop procedure if exists addDay;
+drop procedure if exists addRoute;
+drop procedure if exists addDestination;
+drop procedure if exists addFlight;
+drop procedure if exists addReservation;
+drop procedure if exists addPassenger;
+drop procedure if exists addContact;
+drop procedure if exists addPayment;
+drop procedure if exists deleteReservation;
+drop function if exists calculateFreeSeats;
+drop function if exists calculatePrice;
+drop function if exists createRandomTicket;
+drop function if exists airport_code_to_name;
+drop function if exists doesPassangerExist;
+drop function if exists doesReservationExist;
+drop function if exists doesReservationHaveContact;
+drop function if exists hasBookingBeenPayed;
+drop function if exists doesPayerExist;
+drop function if exists getDayFactor;
+
+DELIMITER //
+
+-- --------- ADD YEAR ---------------
+
+CREATE PROCEDURE addYear(in year int, in PF double)
+
+BEGIN
+  INSERT INTO Year
+  VALUES (year,PF);
+END//
+
+-- ------ ADD DAY -----------------
+
+CREATE PROCEDURE addDay(
+  in year INTEGER,
+  in day varchar(10),
+  in factor double
+)
+BEGIN
+	insert into Weekday
+  values (day, year, factor);
+END//
+
+-- ----------- ADD ROUTE --------------
+
+CREATE PROCEDURE addRoute(
+  in departure varchar(3),
+  in arrival varchar(3),
+  in year int,
+  in price double
+)
+BEGIN
+  insert into Route(price,arrival,departure,year)
+  values (price,arrival,departure,year);
+END//
+
+-- ---------- ADD DESTINATION -----------
+
+CREATE PROCEDURE addDestination(
+  in airport_code varchar(3),
+  in name varchar(30),
+  in country varchar(30)
+)
+BEGIN
+	insert into Airport
+  values (airport_code, name, country);
+END//
+
+-- ------- ADD FLIGHT --------------
+
+CREATE PROCEDURE addFlight(
+  in dep varchar(3),
+  in arr varchar(3),
+  in year_in int,
+  in day varchar(10),
+  in departure_time time
+)
+BEGIN
+  declare i INT default 0;
+  declare max_id INT default 0;
+
+  declare route_id integer;
+  set route_id = (SELECT ID FROM Route WHERE year = year_in AND arrival = arr AND departure = dep);
+  set i = 1;
+
+  insert into Weekly_Schedule(time_of_day, weekday, route)
+  values(departure_time, day, route_id);
+  set max_id = (SELECT MAX(ID) from Weekly_Schedule);
+
+
+  while (i <=52) DO
+    insert into Flight(week_number, weekly_schedule)
+    values(i, max_id);
+    set i = i+1;
+  end while;
+END//
+
+-- ------- ADD RESERVATION ------------
+
+CREATE PROCEDURE addReservation(
+  in departure_airport varchar(3),
+  in arrival_airport varchar(3),
+  in year_in int,
+  in week_in int,
+  in day_in varchar(10),
+  in time_in time,
+  in number_of_passengers_input int,
+  out output_reservation_number int
+)
+
+BEGIN
+declare flight_numb int;
+
+set flight_numb = (SELECT ID FROM Flight WHERE week_number = week_in
+  AND weekly_schedule =(
+    SELECT ID FROM Weekly_Schedule WHERE weekday =(
+      SELECT day FROM Weekday WHERE day = day_in)
+    AND time_of_day = time_in
+    AND route =(
+      SELECT ID FROM Route WHERE year = year_in
+      AND arrival = arrival_airport
+      AND departure = departure_airport)));
+
+
+IF (flight_numb IS NOT NULL) THEN
+
+  IF (number_of_passengers_input <= calculateFreeSeats(flight_numb)) THEN
+  SET output_reservation_number = (SELECT MAX(reservation_number) FROM Reservation) + 1;
+  INSERT INTO Reservation(flight, number_of_passengers)
+  VALUES(flight_numb,0);
+  SET output_reservation_number = LAST_INSERT_ID();
+
+  ELSE
+    SELECT "There are not enough seats available on the chosen flight" as "Response";
+  END IF;
+
+ELSE
+  SELECT "There exist no flight for the given route, date and time" as "Response";
+END IF;
+
+END//
+
+ -- ---------- ADD PASSENGER -------------------
+
+CREATE PROCEDURE addPassenger(
+  in res_number int,
+  in passport_number_in int,
+  in name varchar(255)
+)
+
+BEGIN
+
+IF (doesReservationExist(res_number) = 0) then
+  SELECT "The given reservation number does not exist" as "Response";
+
+ELSE
+
+  IF (hasBookingBeenPayed(res_number) = 1) then
+    SELECT "The booking has already been payed and no futher passengers can be added" as "Response";
+  ELSE
+    IF (doesPassangerExist(passport_number_in) = 0) then
+      INSERT INTO Passenger(passport_number, full_name)
+      VALUES(passport_number_in, name);
+    END IF;
+
+    INSERT INTO Holds(passenger,reservation_number)
+    VALUES(passport_number_in, res_number);
+
+    UPDATE Reservation
+    SET number_of_passengers = number_of_passengers + 1
+    WHERE reservation_number = res_number;
+
+  END IF;
+END IF;
+END//
+
+-- ------------------ ADD CONTACT --------------------------------
+
+CREATE PROCEDURE addContact(
+
+ in reservation_nr int,
+ in passport_number int,
+ in email varchar(50),
+ in phone bigint
+
+
+)
+BEGIN
+
+if (doesReservationExist(reservation_nr) = 0) then
+    select "The given reservation number does not exist" as "Response";
+elseif  ((select count(*) from Holds where reservation_number = reservation_nr and passenger = passport_number )=0) then
+    select "The person is not a passenger of the reservation" as "Response";
+else
+  INSERT INTO Contact(passenger_passport_number, phone_number, reservation_number, email)
+  VALUES (passport_number, phone, reservation_nr, email);
+
+  UPDATE Reservation
+  SET contact = passport_number
+  WHERE reservation_number = reservation_nr;
+
+END IF;
+END//
+
+-- ----------------- ADD PAYMENT ------------------------------
+
+CREATE PROCEDURE addPayment(
+  in reservation_number_in int,
+  in card_holder_in varchar(255),
+  in card_number_in bigint
+)
+
+BEGIN
+declare flight_numb int;
+declare reservation_passengers int;
+
+set flight_numb = (SELECT flight FROM Reservation WHERE reservation_number = reservation_number_in);
+set reservation_passengers = (SELECT number_of_passengers FROM Reservation WHERE reservation_number = reservation_number_in);
+
+
+IF (doesReservationExist(reservation_number_in) = 0) THEN
+  SELECT "The given reservation number does not exist" as "Response";
+
+ELSE
+  IF (doesReservationHaveContact(reservation_number_in) = 0) THEN
+    SELECT "The reservation has no contact yet" as "Response";
+  ELSE
+    IF (calculateFreeSeats(flight_numb) >= reservation_passengers) then
+      -- SELECT SLEEP(9);
+
+      IF (doesPayerExist(card_number_in) = 0) THEN
+        INSERT INTO Payer(card_number, card_holder)
+        VALUES(card_number_in, card_holder_in);
+      END IF;
+
+
+      INSERT INTO Booking(reservation_number, payer, price)
+      VALUES(reservation_number_in, card_number_in, calculatePrice(flight_numb));
+    ELSE
+      SELECT "There are not enough seats available on the flight anymore, deleting reservation" as "Response";
+      CALL deleteReservation(reservation_number_in);
+    END IF;
+  END IF;
+END IF;
+
+END//
+
+-- -------- DELETE RESERVATION ------------
+
+CREATE PROCEDURE deleteReservation(
+  in reservation_number_in int
+)
+
+BEGIN
+DELETE FROM Reservation WHERE reservation_number = reservation_number_in;
+DELETE FROM Holds WHERE reservation_number = reservation_number_in;
+DELETE FROM Contact WHERE reservation_number = reservation_number_in;
+END//
+
+-- ------- HELPFUNCTIONS ----------
+
+CREATE FUNCTION doesReservationExist(res_number INT)
+RETURNS int
+BEGIN
+return (SELECT COUNT(*) FROM Reservation WHERE reservation_number = res_number);
+END//
+
+CREATE FUNCTION doesPassangerExist(passport_number_in INT)
+RETURNS int
+BEGIN
+return (SELECT COUNT(*) FROM Passenger WHERE passport_number = passport_number_in);
+END//
+
+CREATE FUNCTION doesReservationHaveContact(reservation_number_in INT)
+RETURNS int
+BEGIN
+return (SELECT COUNT(*) FROM Reservation WHERE reservation_number = reservation_number_in AND contact is not null);
+END//
+
+CREATE FUNCTION hasBookingBeenPayed(reservation_number_in INT)
+RETURNS int
+BEGIN
+return (SELECT COUNT(*) FROM Booking WHERE reservation_number = reservation_number_in AND payer is not null);
+END//
+
+CREATE FUNCTION doesPayerExist(card_number_in bigint)
+RETURNS int
+BEGIN
+return (SELECT COUNT(*) FROM Payer WHERE card_number = card_number_in);
+END//
+
+
+
+-- ---CALCULATES HOW MANY FREE SEATS THERE ARE FOR A FLIGHT -----
+
+CREATE FUNCTION calculateFreeSeats(flightnumber INT)
+RETURNS INT
+BEGIN
+declare tot_seats INT default 40;
+
+	RETURN(
+		tot_seats - (
+		SELECT IFNULL(SUM(number_of_passengers),0)
+		FROM Reservation
+		WHERE flight = flightnumber
+    AND reservation_number in (SELECT reservation_number FROM Booking)));
+
+END//
+
+CREATE FUNCTION getDayFactor(flightnumber INT, year_var INT)
+RETURNS DOUBLE
+BEGIN
+
+RETURN (SELECT weekdayfactor FROM Weekday WHERE year = year_var AND day =(
+  SELECT weekday FROM Weekly_Schedule WHERE ID = (
+    SELECT weekly_schedule FROM Flight WHERE ID = flightnumber)));
+
+END//
+
+-- ---------- CALCULATES PRICE FOR FLIGHT ---------
+
+CREATE FUNCTION calculatePrice(flightnumber INT)
+RETURNS double
+BEGIN
+declare weekdayFactor double;
+declare routePrice double;
+declare mathFactor double;
+declare yearProfitFactor double;
+declare year_var int;
+
+
+set year_var = (SELECT year FROM Weekday WHERE day = (
+    SELECT weekday FROM Weekly_Schedule WHERE ID =(
+      SELECT weekly_schedule FROM Flight WHERE ID = flightnumber)));
+
+set weekdayFactor = getDayFactor(flightnumber, year_var);
+
+set routePrice = (SELECT price FROM Route WHERE ID=(
+  SELECT route FROM Weekly_Schedule WHERE ID=(
+    SELECT weekly_schedule FROM Flight WHERE ID = flightnumber)));
+
+set yearProfitFactor = (SELECT PF FROM Year WHERE ID = year_var);
+
+set mathFactor = ((40 - calculateFreeSeats(flightnumber) + 1)/40);
+
+RETURN weekdayFactor*routePrice*yearProfitFactor*mathFactor;
+
+END//
+
+-- --------------- GENERATE TICKET ---------------
+
+CREATE FUNCTION createRandomTicket()
+RETURNS INTEGER
+BEGIN
+	RETURN(
+    RAND()*100000
+	);
+END//
+
+-- ----- TRIGGER UPDATING TICKET NUMBER FOR "HOLDS" -------
+
+CREATE Trigger payedReservation
+
+AFTER INSERT
+ON Booking
+FOR EACH ROW
+
+BEGIN
+
+IF (new.reservation_number) THEN
+  UPDATE Holds
+  SET ticket_number = createRandomTicket()
+  WHERE reservation_number = new.reservation_number;
+END IF;
+END//
+
+-- ---------- RETURNING AIRPORT NAME FROM AIRPORT CODE ------------
+
+CREATE FUNCTION airport_code_to_name(airport_code varchar(3))
+
+RETURNS varchar(30)
+
+BEGIN
+
+ RETURN(
+    select Airport.name
+    from Airport
+    where Airport.airport_code = airport_code
+ );
+END//
+
+DELIMITER ;

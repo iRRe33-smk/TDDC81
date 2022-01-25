@@ -1,0 +1,26 @@
+-- CALL addYear(2010, 2.3);
+-- CALL addDay(2010,"Monday",1);
+-- CALL addDestination("MIT","Minas Tirith","Mordor");
+-- CALL addDestination("HOB","Hobbiton","The Shire");
+-- CALL addRoute("MIT","HOB",2010,2000);
+-- CALL addFlight("MIT","HOB", 2010, "Monday", "09:00:00");
+-- CALL addFlight("MIT","HOB", 2010, "Monday", "21:00:00");
+--
+-- CALL addReservation("MIT","HOB",2010,1,"Monday","21:00:00",3,@a);
+-- CALL addPassenger(@a,5,"Saruman");
+-- CALL addPassenger(@a,6,"Orch1");
+-- SELECT * FROM Booking;
+-- CALL addPassenger(@a,7,"Orch2");
+-- CALL addPassenger(@a,8,"Orch3");
+-- CALL addContact(@a,5,"saruman@magic.mail",080667989);
+-- SELECT * FROM Booking;
+-- CALL addPayment (@a, "Sauron",7878787878);
+-- SELECT * FROM Booking;
+-- SELECT * FROM Holds;
+--
+-- -- SELECT * FROM Booking;
+-- -- SELECT * FROM Holds;
+-- -- SELECT * FROM Contact;
+-- -- SELECT * FROM Passenger;
+--
+-- -- SELECT createRandomTicket();
